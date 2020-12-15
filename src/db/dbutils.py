@@ -1,14 +1,15 @@
+# -*- coding: UTF-8 -*-
 import pymysql
 import logging
 
 logger = logging.getLogger(__name__)  # 操作日志对象
-logging.basicConfig(level=logging.NOTSET)
+logging.basicConfig(level=logging.DEBUG)
 
 
-class MysqlConn():
-    '''
+class MysqlConn:
+    """
     数据库连接的公共类，提供连接数据库，查询，删除语句等操作
-    '''
+    """
 
     def __init__(self, dbName=None):
         self.currentConn = None
@@ -41,7 +42,7 @@ class MysqlConn():
         '''执行sql'''
         if closeConn:
             self.open()
-        logger.info("开始执行sql语句")
+        # logger.info("开始执行sql语句")
         self.cursor = self.currentConn.cursor()
         with self.cursor as my_cursor:
             my_cursor.execute(sql)  # 执行sql语句
@@ -60,13 +61,13 @@ class MysqlConn():
                 my_cursor.executemany(sql, values)
                 self.currentConn.commit()
         except Exception as e:
-            logger.info(e)
+            logger.exception(e)
             self.currentConn.rollback()
 
     def close(self):  # 关闭连接
         logger.info("关闭数据库连接")
-        if self.cursor:
-            self.cursor.close()
+        if self.currentConn.cursor():
+            self.currentConn.cursor().close()
         self.currentConn.close()
 
 
@@ -77,8 +78,8 @@ class MysqlConn():
 # db.close()
 
 
-# sql = "INSERT INTO fundcompany(company_shortname,company_tturl,company_name,company_setupdate) VALUES(%s,%s,%s,%s)"
-# values = [('THJJ', '/Company/80041198.html', '天弘基金管理有限公司', '2004-11-08'), ('YFDJJ', '/Company/80000229.html', '易方达基金管理有限公司', '2001-04-17')]
+# sql = "INSERT INTO fundcompany(company_shortname,company_code,company_name,company_setupdate) VALUES(%s,%s,%s,%s)"
+# values = [('THJJ', '80041198', '天弘基金管理有限公司', '2004-11-08'), ('YFDJJ', '80000229', '易方达基金管理有限公司', '2001-04-17')]
 # db = MysqlConn("dbfundquant")
 # db.open()
 # db.executemany(sql, values)

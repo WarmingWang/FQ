@@ -1,39 +1,49 @@
 # -*- coding: UTF-8 -*-
-
 __author__ = "WarmingWang"
 
-from src.crawler import downloadfromtt
 from src.db import dbutils
+from src.db import dbfundquant
+from src.crawler import downloadfromtt
 
 
 def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print("Hi, {0}".format(name))  # Press Ctrl+F8 to toggle the breakpoint.
 
+    dl = downloadfromtt.DownloadFromTT()
+    dbfq = dbfundquant.DBFundQuant()
+
+    """网页抓取数据库中没有的基金公司"""
+    companies = dl.downloadfundcompany()
+    """基金公司到数据库"""
+    dbfq.insertFundCompany(companies)
+
+
+    """从数据库获取所有基金公司,抓取基金到数据库"""
     db = dbutils.MysqlConn('dbfundquant')
     db.open()
-
-    x = downloadfromtt.DownloadFromTT()
-    companies = x.downloadfundcompany()
-    # print(companies)
-
-    i = 0
-    values = []
-    sql = "INSERT INTO fundcompany(company_shortname,company_tturl,company_name,company_setupdate) VALUES(%s,%s,%s,%s)"
+    sql = "select company_code from fundcompany order by company_code"
+    companies = db.execSql(sql, False)
     for company in companies:
-        i = i + 1
-        values.append(company)
-        if i % 50 == 0:
-            db.executemany(sql, values)
-            values = []
-    db.executemany(sql, values)
-
+        """通过基金抓取对应的开放式基金"""
+        funds = dl.openfundincompany(company[0])
+        dbfq.insertFundinfo(company[0], funds)
     db.close()
 
 
+    """
+    下载基金对应的行情信息到数据库
+    getfundday内部调用dbfq.insertFundday()实现插入数据库操作
+    """
+    db = dbutils.MysqlConn('dbfundquant')
+    db.open()
+    sql = "select company_code from fundcompany order by company_code"
+    companies = db.execSql(sql, False)
+    for company in companies:
+        """通过基金抓取对应的开放式基金"""
+        funds = dl.openfundincompany(company[0])
+        dbfq.insertFundinfo(company[0], funds)
+    db.close()
+    dl.getfunddayhis('001631', 49)
 
-    print(x.downloadfundinfo())
-    print(x.downloadfundday())
 
 
 # Press the green button in the gutter to run the script.
