@@ -3,7 +3,7 @@ import pymysql
 import logging
 
 logger = logging.getLogger(__name__)  # 操作日志对象
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 
 class MysqlConn:
@@ -13,7 +13,7 @@ class MysqlConn:
 
     def __init__(self, dbName=None):
         self.currentConn = None
-        self.host = "192.168.210.128"
+        self.host = "localhost"#192.168.210.128
         self.user = "fqrun"
         self.password = "fqrun"
         self.dbName = dbName
@@ -34,7 +34,7 @@ class MysqlConn:
             if "Errno 10060" in str(e) or "2003" in str(e):
                 logger.error("数据库连接失败！")
             raise
-        logger.info('数据库连接成功')
+        # logger.info('数据库连接成功')
         self.currentConn = conn  # 数据库连接完成
         # self.cursor = self.currentConn.cursor()  # 游标，用来执行数据库
 
@@ -62,10 +62,11 @@ class MysqlConn:
                 self.currentConn.commit()
         except Exception as e:
             logger.exception(e)
+            logger.exception('sql:'+sql+'values:'+values)
             self.currentConn.rollback()
 
     def close(self):  # 关闭连接
-        logger.info("关闭数据库连接")
+        # logger.info("关闭数据库连接")
         if self.currentConn.cursor():
             self.currentConn.cursor().close()
         self.currentConn.close()

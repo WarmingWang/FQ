@@ -31,6 +31,7 @@ CREATE TABLE `fundcompany`  (
   `company_address` varchar(200) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `company_website` varchar(100) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `company_setupdate` date NULL DEFAULT NULL,
+  `lastupdate` date NULL DEFAULT NULL,
   PRIMARY KEY (`company_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 161 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 
@@ -61,6 +62,7 @@ CREATE TABLE `fundinfo`  (
   `fund_manager` varchar(40) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `fund_setupdate` date NULL DEFAULT NULL,
   `fund_asset` double(16, 2) NULL DEFAULT NULL,
+  `lastupdate` date NULL DEFAULT NULL,
   PRIMARY KEY (`fund_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 9988 CHARACTER SET = utf8 COLLATE = utf8_general_ci ROW_FORMAT = Dynamic;
 

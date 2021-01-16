@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-from src.db import dbutils
+from FQ.src.db import dbutils
 
 
 class DBFundQuant:
@@ -47,10 +47,13 @@ class DBFundQuant:
         return 0
 
     def insertFundday(self, fundday: tuple):
+        addfundday = []
+        for fd in fundday:
+            sql = "select * from fundday where fund_code = '%s' and date = '%s'" % (fd[0], fd[1])
+            if not self.db.execSql(sql, False):
+                addfundday.append(fd)
         sql = "INSERT INTO fundday(fund_code,date,netvalue,totalvalue,substatus,rdmstatus) VALUES(%s,%s,%s,%s,%s,%s)"
-        # print(sql)
-        print(fundday)
-        # self.db.executemany(sql, fundday)
+        self.db.executemany(sql, addfundday)
         return 0
 
 

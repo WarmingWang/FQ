@@ -2,14 +2,15 @@
 
 import re
 import logging
+import time
 
-from src.utils import utils
-from src.db import dbutils
-from src.db import dbfundquant
+from FQ.src.utils import utils
+from FQ.src.db import dbutils
+from FQ.src.db import dbfundquant
 from urllib.request import urlopen, Request
 
 logger = logging.getLogger(__name__)  # 操作日志对象
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 """
 每日行情：http://fund.eastmoney.com/bzdm.html#os_0;isall_0;ft_;pt_1
@@ -21,20 +22,28 @@ class DownloadFromTT:
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
         'Accept-Encoding': 'gzip, deflate',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.67 Safari/537.36 Edg/87.0.664.47'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.60'
     }
     URL_HOME = 'http://fund.eastmoney.com'
 
     def downloadfundcompany(self) -> list:
         url_company = self.URL_HOME + '/company'
-        html = urlopen(Request(url_company, headers=self.headers)).read()
+        i = 0
+        while 1:
+            try:
+                html = urlopen(Request(url_company, headers=self.headers)).read()
+                break
+            except ConnectionResetError:
+                logger.debug('访问失败%d次，5秒后尝试再次连接', ++i)
+                time.sleep(5)
+                continue
         html = utils.ungzip(html).decode('utf-8')
         cre = re.compile('<table id="gspmTbl".*?<tbody>(.*?)</tbody>', re.S)
         html_table = cre.findall(html)[0]
 
         companies = []
         rows = re.findall(r'<tr(.*?)</tr>', html_table, re.S)
-        logger.info('爬取基金公司个数：' + str(len(rows)))
+        logger.debug('爬取基金公司个数：' + str(len(rows)))
 
         db = dbutils.MysqlConn('dbfundquant')
         db.open()
@@ -47,7 +56,7 @@ class DownloadFromTT:
                 if not db.execSql(sql, False):
                     companies.append(td)
         # print(companies)
-        logger.info('新增基金公司个数：' + str(len(companies)) + ' :' + str(companies))
+        logger.debug('新增基金公司个数：' + str(len(companies)) + ' :' + str(companies))
         db.close()
         return companies
 
@@ -59,13 +68,23 @@ class DownloadFromTT:
 
     def openfundincompany(self, company_code: str) -> list:
         url_company = self.URL_HOME + '/Company/' + company_code + '.html'
-        html = urlopen(Request(url_company, headers=self.headers)).read()
+        i = 0
+        while 1:
+            try:
+                html = urlopen(Request(url_company, headers=self.headers)).read()
+                break
+            except ConnectionResetError:
+                i += 1
+                logger.debug('访问失败%d次，5秒后尝试再次连接', i)
+                time.sleep(5)
+                continue
+
         html = utils.ungzip(html).decode('utf-8')
         cre = re.compile('<div id="kfsFundNetWrap">.*?</div>', re.S)
-        html_table = cre.findall(html)[0]  # 基金名称                     基金代码
+        html_table = cre.findall(html)[0]                               # 基金名称                     基金代码
         rows = re.findall(r'<td class="fund-name-code">.*?<a.*?"name".*?>(.*?)</a>.*?<a.*?"code".*?>(.*?)</a>.*?</td>',
                           html_table, re.S)
-        logger.info('基金公司代码：' + company_code + ' 爬取开放式基金个数：' + str(len(rows)))
+        logger.debug('基金公司代码：' + company_code + ' 爬取开放式基金个数：' + str(len(rows)))
 
         if len(rows) == 0:
             return []
@@ -78,17 +97,9 @@ class DownloadFromTT:
             if not db.execSql(sql, False):
                 funds.append(row)
         # print(funds)
-        logger.info('基金公司代码：' + company_code + ' 新增开放式基金个数：' + str(len(funds)) + ' :' + str(funds))
+        logger.debug('基金公司代码：' + company_code + ' 新增开放式基金个数：' + str(len(funds)) + ' :' + str(funds))
         db.close()
         return funds
-
-    def getfunddaycur(self, fund_code: str) -> list:
-        url_fundday = 'http://fund.eastmoney.com/js/fundcode_search.js'
-        html = urlopen(Request(url_fundday, headers=self.headers)).read()
-        jsonStr = utils.ungzip(html).decode('utf-8')
-        print(jsonStr)
-
-        return 'getfunddaycur success...'
 
     """
     获取基金历史行情
@@ -101,7 +112,7 @@ class DownloadFromTT:
         per     N条/页  默认20（经测试最大支持49）
     """
 
-    def getfunddayhis(self, code: str, per=20, sdate='', edate=''):
+    def getfundday(self, code: str, sdate='', edate='', per=49):
         """获取记录数和页码"""
 
         def getRecordsAndPages(html: str):
@@ -126,15 +137,23 @@ class DownloadFromTT:
 
         url = 'http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=' + code + '&per=' + str(
             per) + '&sdate=' + sdate + '&edate=' + edate
-        html = urlopen(Request(url + '&page=1', headers=self.headers)).read().decode('utf-8')
-
+        i = 0
+        while 1:
+            try:
+                html = urlopen(Request(url + '&page=1', headers=self.headers)).read().decode('utf-8')
+                break
+            except ConnectionResetError:
+                i += 1
+                logger.debug('访问失败%d次，5秒后尝试再次连接', i)
+                time.sleep(5)
+                continue
         rp = getRecordsAndPages(html)
         records = int(rp.group(1))
         pages = int(rp.group(2))
         values = []
         value = []
         x = dbfundquant.DBFundQuant()
-        if records > 0 and pages > 0:
+        if records > 0 and pages > 0:                       #第一页
             funddaydic = parsehtmltable(html)
             for i in range(len(funddaydic['净值日期'])):
                 value.append(code)
@@ -149,9 +168,18 @@ class DownloadFromTT:
         else:
             return []
 
-        for curpage in range(2, pages + 1, 1):
+        for curpage in range(2, pages + 1, 1):              #第二页开始循环
             values = []
-            html = urlopen(Request(url + '&page=' + str(curpage), headers=self.headers)).read().decode('utf-8')
+            i = 0
+            while 1:
+                try:
+                    html = urlopen(Request(url + '&page=' + str(curpage), headers=self.headers)).read().decode('utf-8')
+                    break
+                except ConnectionResetError:
+                    i += 1
+                    logger.debug('访问失败%d次，5秒后尝试再次连接', i)
+                    time.sleep(5)
+                    continue
             funddaydic = parsehtmltable(html)
             for i in range(len(funddaydic['净值日期'])):
                 value.append(code)
@@ -166,6 +194,7 @@ class DownloadFromTT:
 
         return 0
 
-tt = DownloadFromTT()
-tt.getfunddayhis('001631',49)
+# tt = DownloadFromTT()
+# tt.downloadfundcompany()
+# tt.getfundday('900003')
 
