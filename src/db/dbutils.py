@@ -62,7 +62,7 @@ class MysqlConn:
                 self.currentConn.commit()
         except Exception as e:
             logger.exception(e)
-            logger.exception('sql:'+sql+'values:'+values)
+            logger.exception('sql:'+sql+'values:'+str(values))
             self.currentConn.rollback()
 
     def close(self):  # 关闭连接

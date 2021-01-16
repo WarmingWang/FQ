@@ -81,7 +81,7 @@ class DownloadFromTT:
 
         html = utils.ungzip(html).decode('utf-8')
         cre = re.compile('<div id="kfsFundNetWrap">.*?</div>', re.S)
-        html_table = cre.findall(html)[0]                               # 基金名称                     基金代码
+        html_table = cre.findall(html)[0]  # 基金名称                     基金代码
         rows = re.findall(r'<td class="fund-name-code">.*?<a.*?"name".*?>(.*?)</a>.*?<a.*?"code".*?>(.*?)</a>.*?</td>',
                           html_table, re.S)
         logger.debug('基金公司代码：' + company_code + ' 爬取开放式基金个数：' + str(len(rows)))
@@ -153,13 +153,19 @@ class DownloadFromTT:
         values = []
         value = []
         x = dbfundquant.DBFundQuant()
-        if records > 0 and pages > 0:                       #第一页
+        if records > 0 and pages > 0:  # 第一页
             funddaydic = parsehtmltable(html)
             for i in range(len(funddaydic['净值日期'])):
                 value.append(code)
                 value.append(funddaydic['净值日期'][i])
-                value.append(funddaydic['单位净值'][i])
-                value.append(funddaydic['累计净值'][i])
+                try:
+                    value.append(float(funddaydic['单位净值'][i]))
+                except:
+                    value.append(0)
+                try:
+                    value.append(float(funddaydic['累计净值'][i]))
+                except:
+                    value.append(0)
                 value.append(funddaydic['申购状态'][i])
                 value.append(funddaydic['赎回状态'][i])
                 values.append(tuple(value))
@@ -168,7 +174,7 @@ class DownloadFromTT:
         else:
             return []
 
-        for curpage in range(2, pages + 1, 1):              #第二页开始循环
+        for curpage in range(2, pages + 1, 1):  # 第二页开始循环
             values = []
             i = 0
             while 1:
@@ -184,8 +190,14 @@ class DownloadFromTT:
             for i in range(len(funddaydic['净值日期'])):
                 value.append(code)
                 value.append(funddaydic['净值日期'][i])
-                value.append(funddaydic['单位净值'][i])
-                value.append(funddaydic['累计净值'][i])
+                try:
+                    value.append(float(funddaydic['单位净值'][i]))
+                except:
+                    value.append(0)
+                try:
+                    value.append(float(funddaydic['累计净值'][i]))
+                except:
+                    value.append(0)
                 value.append(funddaydic['申购状态'][i])
                 value.append(funddaydic['赎回状态'][i])
                 values.append(tuple(value))
@@ -197,4 +209,3 @@ class DownloadFromTT:
 # tt = DownloadFromTT()
 # tt.downloadfundcompany()
 # tt.getfundday('900003')
-
