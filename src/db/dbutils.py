@@ -64,6 +64,8 @@ class MysqlConn:
             logger.exception(e)
             logger.exception('sql:'+sql+'values:'+str(values))
             self.currentConn.rollback()
+            return -1
+        return 0
 
     def close(self):  # 关闭连接
         # logger.info("关闭数据库连接")

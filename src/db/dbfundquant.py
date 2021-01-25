@@ -13,7 +13,8 @@ class DBFundQuant:
 
     def insertFundCompany(self, companies: list):
         # print(companies)
-
+        if len(companies) == 0:
+            return 0
         i = 0
         values = []
         sql = "INSERT INTO fundcompany(company_shortname,company_code,company_name,company_setupdate) VALUES(%s,%s,%s,%s)"
@@ -23,11 +24,13 @@ class DBFundQuant:
             """50笔插一次"""
             if i % 50 == 0:
                 # print(sql)
-                self.db.executemany(sql, values)
+                iRet = self.db.executemany(sql, values)
+                if iRet != 0:
+                    return iRet
                 values = []
         # print(sql)
-        self.db.executemany(sql, values)
-        return 0
+        iRet = self.db.executemany(sql, values)
+        return iRet
 
     def insertFundinfo(self, company: str, funds: list):
         i = 0
@@ -39,22 +42,29 @@ class DBFundQuant:
             """50笔插一次"""
             if i % 50 == 0:
                 # print(values)
-                self.db.executemany(sql, values)
+                iRet = self.db.executemany(sql, values)
+                if iRet != 0:
+                    return iRet
                 values = []
         # print(sql)
         # print(values)
-        self.db.executemany(sql, values)
-        return 0
+        iRet = self.db.executemany(sql, values)
+        return iRet
 
-    def insertFundday(self, fundday: tuple):
-        addfundday = []
-        for fd in fundday:
-            sql = "select * from fundday where fund_code = '%s' and date = '%s'" % (fd[0], fd[1])
-            if not self.db.execSql(sql, False):
-                addfundday.append(fd)
+    def insertFundday(self, fundday: tuple, page: int):
+        """第一页且不足49条代表startdate有值，行情里有历史数据，可能有重复，需要判断，耗时较长"""
+        if page == 1 and len(fundday) != 49:
+            addfundday = []
+            for fd in fundday:
+                sql = "select count(1) from fundday where fund_code = '%s' and date = '%s'" % (fd[0], fd[1])
+                iexists = self.db.execSql(sql, False)[0][0]
+                if iexists == 0:
+                    addfundday.append(fd)
+        else:
+            addfundday = fundday
         sql = "INSERT INTO fundday(fund_code,date,netvalue,totalvalue,substatus,rdmstatus) VALUES(%s,%s,%s,%s,%s,%s)"
-        self.db.executemany(sql, addfundday)
-        return 0
+        iRet = self.db.executemany(sql, addfundday)
+        return iRet
 
 
 # company1 = DBFundQuant()

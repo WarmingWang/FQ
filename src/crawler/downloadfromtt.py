@@ -3,6 +3,7 @@
 import re
 import logging
 import time
+import random
 
 from FQ.src.utils import utils
 from FQ.src.db import dbutils
@@ -33,9 +34,13 @@ class DownloadFromTT:
             try:
                 html = urlopen(Request(url_company, headers=self.headers)).read()
                 break
-            except ConnectionResetError:
-                logger.debug('访问失败%d次，5秒后尝试再次连接', ++i)
-                time.sleep(5)
+            except:
+                i += 1
+                if i >= 5:
+                    logger.error('访问失败%d次，请检查！', i)
+                    return []
+                logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
+                time.sleep(random.randint(1, 5))
                 continue
         html = utils.ungzip(html).decode('utf-8')
         cre = re.compile('<table id="gspmTbl".*?<tbody>(.*?)</tbody>', re.S)
@@ -73,10 +78,13 @@ class DownloadFromTT:
             try:
                 html = urlopen(Request(url_company, headers=self.headers)).read()
                 break
-            except ConnectionResetError:
+            except:
                 i += 1
-                logger.debug('访问失败%d次，5秒后尝试再次连接', i)
-                time.sleep(5)
+                if i >= 5:
+                    logger.error('访问失败%d次，请检查！', i)
+                    return -1
+                logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
+                time.sleep(random.randint(1, 5))
                 continue
 
         html = utils.ungzip(html).decode('utf-8')
@@ -93,8 +101,9 @@ class DownloadFromTT:
         db = dbutils.MysqlConn('dbfundquant')
         db.open()
         for row in rows:
-            sql = "select * from fundinfo where company_code = '%s' and fund_code = '%s'" % (company_code, row[1])
-            if not db.execSql(sql, False):
+            sql = "select count(1) from fundinfo where company_code = '%s' and fund_code = '%s'" % (company_code, row[1])
+            iCount = db.execSql(sql, False)[0][0]
+            if iCount == 0:
                 funds.append(row)
         # print(funds)
         logger.debug('基金公司代码：' + company_code + ' 新增开放式基金个数：' + str(len(funds)) + ' :' + str(funds))
@@ -142,10 +151,13 @@ class DownloadFromTT:
             try:
                 html = urlopen(Request(url + '&page=1', headers=self.headers)).read().decode('utf-8')
                 break
-            except ConnectionResetError:
+            except:
                 i += 1
-                logger.debug('访问失败%d次，5秒后尝试再次连接', i)
-                time.sleep(5)
+                if i >= 5:
+                    logger.error('访问失败%d次，请检查！', i)
+                    return -1
+                logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
+                time.sleep(random.randint(1, 5))
                 continue
         rp = getRecordsAndPages(html)
         records = int(rp.group(1))
@@ -170,21 +182,28 @@ class DownloadFromTT:
                 value.append(funddaydic['赎回状态'][i])
                 values.append(tuple(value))
                 value = []
-            x.insertFundday(values)
+            iRet = x.insertFundday(values, 1)
+            if iRet != 0:
+                logger.error('插入行情失败表')
+                return iRet
         else:
-            return []
+            return 0
 
         for curpage in range(2, pages + 1, 1):  # 第二页开始循环
             values = []
             i = 0
+            # starttime = time.time()
             while 1:
                 try:
                     html = urlopen(Request(url + '&page=' + str(curpage), headers=self.headers)).read().decode('utf-8')
                     break
-                except ConnectionResetError:
+                except:
                     i += 1
-                    logger.debug('访问失败%d次，5秒后尝试再次连接', i)
-                    time.sleep(5)
+                    if i >= 5:
+                        logger.error('访问失败%d次，请检查！', i)
+                        return -1
+                    logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
+                    time.sleep(random.randint(1, 5))
                     continue
             funddaydic = parsehtmltable(html)
             for i in range(len(funddaydic['净值日期'])):
@@ -202,8 +221,14 @@ class DownloadFromTT:
                 value.append(funddaydic['赎回状态'][i])
                 values.append(tuple(value))
                 value = []
-            x.insertFundday(values)
-
+            # endtime = time.time()
+            # print('单页行情解析用时 %.8s s' % (endtime - starttime))
+            iRet = x.insertFundday(values, curpage)
+            # end1time = time.time()
+            # print('单页行情插入用时 %.8s s' % (end1time - endtime))
+            if iRet != 0:
+                logger.error('插入行情失败表')
+                return iRet
         return 0
 
 # tt = DownloadFromTT()
