@@ -66,6 +66,21 @@ class DBFundQuant:
         iRet = self.db.executemany(sql, addfundday)
         return iRet
 
+    def insertFunddayAudit(self, funddayaudits: tuple):
+        i = 0
+        values = []
+        sql = "INSERT INTO funddayaudit(fund_code,funddayrecords) VALUES(%s,%s)"
+        for funddayaudit in funddayaudits:
+            i = i + 1
+            values.append(funddayaudit)
+            """50笔插一次"""
+            if i % 50 == 0:
+                iRet = self.db.executemany(sql, values)
+                if iRet != 0:
+                    return iRet
+                values = []
+        iRet = self.db.executemany(sql, values)
+        return iRet
 
 # company1 = DBFundQuant()
 # # company1.insertFundCompany()

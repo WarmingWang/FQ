@@ -67,6 +67,20 @@ class MysqlConn:
             return -1
         return 0
 
+    def callproc(self, proc: str, *args):
+        """"""
+        try:
+            self.cursor = self.currentConn.cursor()
+            with self.cursor as my_cursor:
+                my_cursor.callproc(proc, args)
+                self.currentConn.commit()
+        except Exception as e:
+            logger.exception(e)
+            logger.exception('proc:'+proc)
+            self.currentConn.rollback()
+            return -1
+        return 0
+
     def close(self):  # 关闭连接
         # logger.info("关闭数据库连接")
         if self.currentConn.cursor():
