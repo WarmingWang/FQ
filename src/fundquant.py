@@ -213,9 +213,9 @@ def afterStat():
 if __name__ == '__main__':
 
     """下载"""
-    # loadFundQuant()
-    # """稽核"""
-    # auditFundQuant()
+    loadFundQuant()
+    """稽核"""
+    auditFundQuant()
     """统计"""
     if afterStat() == 0:
         print("统计数据成功")
