@@ -62,7 +62,7 @@ class DBFundQuant:
                     addfundday.append(fd)
         else:
             addfundday = fundday
-        sql = "INSERT INTO fundday(fund_code,date,netvalue,totalvalue,substatus,rdmstatus) VALUES(%s,%s,%s,%s,%s,%s)"
+        sql = "INSERT INTO fundday(fund_code,date,netvalue,totalvalue,substatus,rdmstatus,bonus) VALUES(%s,%s,%s,%s,%s,%s,%s)"
         iRet = self.db.executemany(sql, addfundday)
         return iRet
 

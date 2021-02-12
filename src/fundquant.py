@@ -169,13 +169,13 @@ def auditFundQuant():
             break
     return iRet
 
-def statYieldByComp(companycode: str):
+def statYieldByComp(companycode: str, enddate: str):
     """按公司维度统计区间收益表"""
     try:
         db = dbutils.MysqlConn('dbfundquant')
         db.open()
         """生成区间收益率"""
-        db.callproc("Gen_intervalyields", companycode)
+        db.callproc("Gen_intervalyields", companycode, enddate)
     except:
         return -1
     finally:
@@ -202,7 +202,7 @@ def afterStat():
         # --------------------------------------
         for company in companies:
             # statYieldByComp(str(company[0]))
-            pool.apply_async(func=statYieldByComp, args=(str(company[0]),), callback=update)  # 通过callback来更新进度条
+            pool.apply_async(func=statYieldByComp, args=(str(company[0]), utils.getCurDate()), callback=update)  # 通过callback来更新进度条
     finally:
         pool.close()
         pool.join()
@@ -213,8 +213,11 @@ def afterStat():
 if __name__ == '__main__':
 
     """下载"""
-    loadFundQuant()
-    """稽核"""
-    auditFundQuant()
+    # loadFundQuant()
+    # """稽核"""
+    # auditFundQuant()
     """统计"""
-    afterStat()
+    if afterStat() == 0:
+        print("统计数据成功")
+    else:
+        print("统计数据失败")

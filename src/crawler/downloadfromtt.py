@@ -180,6 +180,7 @@ class DownloadFromTT:
                     value.append(0)
                 value.append(funddaydic['申购状态'][i])
                 value.append(funddaydic['赎回状态'][i])
+                value.append(funddaydic['分红送配'][i])
                 values.append(tuple(value))
                 value = []
             iRet = x.insertFundday(values, 1)
@@ -219,6 +220,7 @@ class DownloadFromTT:
                     value.append(0)
                 value.append(funddaydic['申购状态'][i])
                 value.append(funddaydic['赎回状态'][i])
+                value.append(funddaydic['分红送配'][i])
                 values.append(tuple(value))
                 value = []
             # endtime = time.time()

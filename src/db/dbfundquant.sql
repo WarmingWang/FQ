@@ -11,7 +11,7 @@
  Target Server Version : 80019
  File Encoding         : 65001
 
- Date: 04/02/2021 22:27:07
+ Date: 12/02/2021 21:05:59
 */
 
 SET NAMES utf8mb4;
@@ -44,6 +44,7 @@ CREATE TABLE `fundday`  (
   `totalvalue` double(16, 8) NULL DEFAULT NULL,
   `substatus` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `rdmstatus` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
+  `bonus` varchar(40) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   PRIMARY KEY (`fund_code`, `date`) USING BTREE,
   UNIQUE INDEX `IFUNDDAY_DATE_FUNDCODE`(`date`, `fund_code`) USING BTREE,
   INDEX `IFUNDDAY_FUNDCODE_DATE`(`fund_code`, `date`) USING BTREE
@@ -103,10 +104,17 @@ CREATE TABLE `intervalyields`  (
 -- ----------------------------
 DROP PROCEDURE IF EXISTS `Gen_intervalyields`;
 delimiter ;;
-CREATE DEFINER=`fqrun`@`localhost` PROCEDURE `Gen_intervalyields`(IN v_companycode varchar(8))
+CREATE DEFINER=`fqrun`@`localhost` PROCEDURE `Gen_intervalyields`(IN v_companycode varchar(8), IN v_enddate date)
 BEGIN
   #Routine body goes here...
   insert into intervalyields(fund_code,yield_all,yield_5y,yield_3y,yield_1y,yield_6m,yield_3m,yield_1m,yield_1w)
+  with v_fundday as
+  (select a.fund_code,a.date,a.netvalue,a.bonus
+     from fundday a,fundinfo b
+    where a.fund_code = b.fund_code
+      and b.company_code = v_companycode
+      and a.date <= v_enddate)
+
   select a.fund_code,a.yield_all,
          IFNULL(b.yield_5y, 0) yield_5y,
          IFNULL(c.yield_3y, 0) yield_3y,
@@ -115,273 +123,354 @@ BEGIN
          IFNULL(f.yield_3m, 0) yield_3m,
          IFNULL(g.yield_1m, 0) yield_1m,
          IFNULL(h.yield_1w, 0) yield_1w
-    from (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_all
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+    from (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_all
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) a
+                                         (select a.fund_code,a.netvalue from v_fundday a order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) a
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_5y
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_5y
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) b
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) b
          on a.fund_code = b.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_3y
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3y
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) c
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) c
          on a.fund_code = c.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_1y
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1y
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) d
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) d
          on a.fund_code = d.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_6m
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_6m
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) e
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) e
          on a.fund_code = e.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_3m
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3m
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) f
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) f
          on a.fund_code = f.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_1m
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1m
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) g
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) g
          on a.fund_code = g.fund_code
          left join
-         (select fund_code,(nexttotalvalue-totalvalue)/netvalue*100 yield_1w
-            from (select fund_code,netvalue,totalvalue,lag(totalvalue,1) over(partition by fund_code ORDER BY date DESC) nexttotalvalue
-                    from (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1w
+            from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
+                    from (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date) a) a
-                           where rownum = 1
-                          union all
-                          select a.fund_code,a.date,a.netvalue,a.totalvalue
-                            from (select a.fund_code,a.date,a.netvalue,a.totalvalue,
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK) order by fund_code,date) a) a
+                           where rownum = 1) a,
+                         (select a.fund_code,a.netvalue
+                            from (select a.fund_code,a.netvalue,
                                          case when @fundcode != a.fund_code then @rownum := 1
                                               else @rownum := @rownum + 1
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.date,a.netvalue,a.totalvalue
-                                            from fundday a,fundinfo b
-                                           where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK)
-                                             and a.fund_code = b.fund_code
-                                             and b.company_code = v_companycode
-                                           order by fund_code,date desc) a) a
-                           where rownum = 1) a) a
-           where a.nexttotalvalue is not null) h
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK) order by fund_code,date desc) a) a
+                           where rownum = 1) b
+                   where a.fund_code = b.fund_code) a
+                 LEFT JOIN
+                 (select fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                   WHEN bonusflag = '1' THEN bonus
+                                                   WHEN bonusflag = '2' THEN bonus
+                                                   END))) Ix
+                    from (select fund_code,lastnetvalue,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                                      END bonusflag,
+                                 CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                                      WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                                      WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                                      END bonus
+                            from (select a.fund_code,a.bonus,
+                                         lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
+                                    from v_fundday a
+                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK)) a
+                           where LENGTH(trim(bonus))>0) a
+                   GROUP BY fund_code) c
+                  ON a.fund_code = c.fund_code) h
          on a.fund_code = h.fund_code;
   COMMIT;
 END
