@@ -17,12 +17,6 @@ logger = logging.getLogger(__name__)  # 操作日志对象
 logging.basicConfig(level=logging.ERROR)
 
 class Audit:
-    headers = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'Accept-Encoding': 'gzip, deflate',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.60'
-    }
     URL_HOME = 'http://fund.eastmoney.com'
 
     def funddayaudit(self, flag=0):
@@ -85,19 +79,7 @@ class Audit:
         value = []
         for fund in funds:
             url = 'http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=' + str(fund[0]) + '&per=1'
-            i = 0
-            while 1:
-                try:
-                    html = urlopen(Request(url, headers=self.headers)).read().decode('utf-8')
-                    break
-                except:
-                    i += 1
-                    if i >= 5:
-                        logger.error('访问失败%d次，请检查！', i)
-                        return -1
-                    logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
-                    time.sleep(random.randint(1, 5))
-                    continue
+            html = utils.get_urlopen(url)
             rp = getRecordsAndPages(html)
             records = int(rp.group(1))
             value.append(fund[0])

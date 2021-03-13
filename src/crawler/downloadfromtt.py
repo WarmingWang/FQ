@@ -19,31 +19,11 @@ logging.basicConfig(level=logging.ERROR)
 
 
 class DownloadFromTT:
-    # headers = {
-    #     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-    #     'Accept-Encoding': 'gzip, deflate',
-    #     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-    #     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.60'
-    # }
     URL_HOME = 'http://fund.eastmoney.com'
 
     def downloadfundcompany(self) -> list:
         url_company = self.URL_HOME + '/company'
-        # i = 0
-        # while 1:
-        #     try:
-        #         html = urlopen(Request(url_company, headers=self.headers)).read()
-        #         break
-        #     except:
-        #         i += 1
-        #         if i >= 5:
-        #             logger.error('访问失败%d次，请检查！', i)
-        #             return []
-        #         logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
-        #         time.sleep(random.randint(1, 5))
-        #         continue
         html = utils.get_urlopen(url_company)
-        # html = utils.ungzip(html).decode('utf-8')
         cre = re.compile('<table id="gspmTbl".*?<tbody>(.*?)</tbody>', re.S)
         html_table = cre.findall(html)[0]
 
@@ -74,21 +54,6 @@ class DownloadFromTT:
 
     def openfundincompany(self, company_code: str) -> list:
         url_company = self.URL_HOME + '/Company/' + company_code + '.html'
-        # i = 0
-        # while 1:
-        #     try:
-        #         html = urlopen(Request(url_company, headers=self.headers)).read()
-        #         break
-        #     except:
-        #         i += 1
-        #         if i >= 5:
-        #             logger.error('访问失败%d次，请检查！', i)
-        #             return -1
-        #         logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
-        #         time.sleep(random.randint(1, 5))
-        #         continue
-        #
-        # html = utils.ungzip(html).decode('utf-8')
         html = utils.get_urlopen(url_company)
         cre = re.compile('<div id="kfsFundNetWrap">.*?</div>', re.S)
         html_table = cre.findall(html)[0]  # 基金名称                     基金代码
@@ -148,20 +113,6 @@ class DownloadFromTT:
 
         url = 'http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=' + code + '&per=' + str(
             per) + '&sdate=' + sdate + '&edate=' + edate
-        # i = 0
-        # while 1:
-        #     try:
-        #         html = urlopen(Request(url + '&page=1', headers=self.headers)).read().decode('utf-8')
-        #         break
-        #     except:
-        #         i += 1
-        #         if i >= 5:
-        #             logger.error('访问失败%d次，请检查！', i)
-        #             return -1
-        #         logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
-        #         time.sleep(random.randint(1, 5))
-        #         continue
-
         html = utils.get_urlopen(url + '&page=1')
         rp = getRecordsAndPages(html)
         records = int(rp.group(1))
@@ -200,20 +151,6 @@ class DownloadFromTT:
 
         for curpage in range(2, pages + 1, 1):  # 第二页开始循环
             values = []
-            # i = 0
-            # # starttime = time.time()
-            # while 1:
-            #     try:
-            #         html = urlopen(Request(url + '&page=' + str(curpage), headers=self.headers)).read().decode('utf-8')
-            #         break
-            #     except:
-            #         i += 1
-            #         if i >= 5:
-            #             logger.error('访问失败%d次，请检查！', i)
-            #             return -1
-            #         logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
-            #         time.sleep(random.randint(1, 5))
-            #         continue
             html = utils.get_urlopen(url + '&page=' + str(curpage))
             funddaydic = parsehtmltable(html)
             for i in range(len(funddaydic['净值日期'])):
