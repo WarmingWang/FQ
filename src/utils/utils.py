@@ -1,6 +1,9 @@
 # -*- coding: UTF-8 -*-
 
 import gzip
+import time
+import json
+import random
 import datetime
 import logging
 import requests
@@ -9,6 +12,36 @@ from urllib.request import urlopen, Request
 
 logger = logging.getLogger(__name__)  # 操作日志对象
 logging.basicConfig(level=logging.ERROR)
+
+headers = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.60'
+}
+
+def get_urlopen(url_home, ret_type=''):
+    i = 0
+    while 1:
+        try:
+            # html = getHtml(url_home, headers=headers)
+            html = urlopen(Request(url_home, headers=headers)).read()
+            break
+        except:
+            i += 1
+            if i >= 5:
+                logger.error('访问失败%d次，请检查！', i)
+                return []
+            logger.debug('访问失败%d次，1-5秒后尝试再次连接', i)
+            time.sleep(random.randint(1, 5))
+            continue
+    if ret_type == 'json':
+        return json.loads(ungzip(html).decode('utf-8'))
+    elif ret_type == 'pic':
+        return html
+    else:
+        return ungzip(html).decode('utf-8')
+
 """
 解压
 """

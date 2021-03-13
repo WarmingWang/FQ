@@ -11,7 +11,7 @@
  Target Server Version : 80019
  File Encoding         : 65001
 
- Date: 12/02/2021 21:05:59
+ Date: 20/02/2021 16:18:10
 */
 
 SET NAMES utf8mb4;
@@ -42,6 +42,7 @@ CREATE TABLE `fundday`  (
   `date` date NOT NULL,
   `netvalue` double(16, 8) NULL DEFAULT NULL,
   `totalvalue` double(16, 8) NULL DEFAULT NULL,
+  `ratio` double(16, 8) NULL DEFAULT NULL,
   `substatus` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `rdmstatus` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
   `bonus` varchar(40) CHARACTER SET utf8 COLLATE utf8_general_ci NULL DEFAULT NULL,
@@ -123,7 +124,7 @@ BEGIN
          IFNULL(f.yield_3m, 0) yield_3m,
          IFNULL(g.yield_1m, 0) yield_1m,
          IFNULL(h.yield_1w, 0) yield_1w
-    from (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_all
+    from (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_all
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -165,7 +166,7 @@ BEGIN
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) a
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_5y
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_5y
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -174,7 +175,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 5 YEAR) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -183,7 +184,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 5 YEAR) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -203,13 +204,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 5 YEAR)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 5 YEAR)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) b
          on a.fund_code = b.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3y
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3y
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -218,7 +219,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 3 YEAR) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -227,7 +228,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 3 YEAR) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -247,13 +248,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 YEAR)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 3 YEAR)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) c
          on a.fund_code = c.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1y
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1y
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -262,7 +263,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 YEAR) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -271,7 +272,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 YEAR) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -291,13 +292,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 1 YEAR)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) d
          on a.fund_code = d.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_6m
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_6m
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -306,7 +307,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 6 MONTH) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -315,7 +316,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 6 MONTH) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -335,13 +336,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 6 MONTH)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) e
          on a.fund_code = e.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3m
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_3m
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -350,7 +351,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 3 MONTH) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -359,7 +360,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 3 MONTH) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -379,13 +380,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 3 MONTH)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) f
          on a.fund_code = f.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1m
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1m
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -394,7 +395,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 MONTH) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -403,7 +404,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 MONTH) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -423,13 +424,13 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 1 MONTH)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) g
          on a.fund_code = g.fund_code
          left join
-         (select a.fund_code,a.beginnet,a.endnet,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1w
+         (select a.fund_code,round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 yield_1w
             from (select a.fund_code,a.netvalue beginnet,b.netvalue endnet
                     from (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -438,7 +439,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK) order by fund_code,date) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 WEEK) order by fund_code,date) a) a
                            where rownum = 1) a,
                          (select a.fund_code,a.netvalue
                             from (select a.fund_code,a.netvalue,
@@ -447,7 +448,7 @@ BEGIN
                                               end as rownum,
                                          @fundcode := fund_code
                                     from (select @rownum := 0, @fundcode := "") var,
-                                         (select a.fund_code,a.netvalue from v_fundday a where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK) order by fund_code,date desc) a) a
+                                         (select a.fund_code,a.netvalue from v_fundday a where a.date > DATE_SUB(v_enddate, INTERVAL 1 WEEK) order by fund_code,date desc) a) a
                            where rownum = 1) b
                    where a.fund_code = b.fund_code) a
                  LEFT JOIN
@@ -467,7 +468,7 @@ BEGIN
                             from (select a.fund_code,a.bonus,
                                          lag(a.netvalue,1) over(partition by fund_code ORDER BY date) lastnetvalue
                                     from v_fundday a
-                                   where a.date >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK)) a
+                                   where a.date > DATE_SUB(v_enddate, INTERVAL 1 WEEK)) a
                            where LENGTH(trim(bonus))>0) a
                    GROUP BY fund_code) c
                   ON a.fund_code = c.fund_code) h
@@ -484,15 +485,38 @@ DROP FUNCTION IF EXISTS `getyield`;
 delimiter ;;
 CREATE DEFINER=`fqrun`@`localhost` FUNCTION `getyield`(fundcode VARCHAR(6), begindate date, enddate date) RETURNS double(16,8)
 begin
-    declare yield double(16,8);
-    select (nexttotalvalue-totalvalue)/netvalue*100 into yield
-      from (select netvalue,totalvalue,lag(totalvalue,1) over(ORDER BY date DESC) nexttotalvalue
-              from ((select date,netvalue,totalvalue from fundday where fund_code = fundcode and date >= begindate and date <= enddate LIMIT 1)
-                     union all
-                    (select date,netvalue,totalvalue from fundday where fund_code = fundcode and date >= begindate and date <= enddate ORDER BY date desc LIMIT 1)
-                   )a
-           )a
-     where a.nexttotalvalue is not null;
+  declare yield double(16,8);
+  with v_fundday as
+  (select a.fund_code,a.date,a.netvalue,a.bonus
+     from fundday a
+    where a.fund_code = fundcode
+      and a.date <= enddate
+		   	and a.date >= begindate)
+  select round(a.endnet/a.beginnet* IFNULL(c.Ix,1)-1,4)*100 into yield
+    from (select 'xxxxxx' fund_code,a.netvalue beginnet,b.netvalue endnet
+            from (select netvalue from v_fundday LIMIT 1) a,
+                 (select netvalue from v_fundday ORDER BY date desc LIMIT 1) b
+         ) a
+         LEFT JOIN
+         (select 'xxxxxx' fund_code,EXP(SUM(LN(CASE WHEN bonusflag = '0' THEN (1+bonus/(lastnetvalue-bonus))
+                                                    WHEN bonusflag = '1' THEN bonus
+                                                    WHEN bonusflag = '2' THEN bonus
+                                                    END))) Ix
+            from (select lastnetvalue,
+                         CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN '0'
+                              WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN '1'
+                              WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN '2'
+                              END bonusflag,
+                         CASE WHEN INSTR(bonus,'每份派现金') > 0 THEN REPLACE(REPLACE(bonus,'每份派现金',''),'元','')
+                              WHEN INSTR(bonus,'每份基金份额折算') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额折算',''),'份','')
+                              WHEN INSTR(bonus,'每份基金份额分拆') > 0 THEN REPLACE(REPLACE(bonus,'每份基金份额分拆',''),'份','')
+                              END bonus
+                    from (select a.bonus,
+                                 lag(a.netvalue,1) over(ORDER BY date) lastnetvalue
+                            from v_fundday a) a
+                   where LENGTH(trim(bonus))>0) a
+         ) c
+         ON a.fund_code = c.fund_code;
     return yield;
 end
 ;;
